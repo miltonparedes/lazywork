@@ -5,6 +5,7 @@
 *.so
 *.dylib
 lazycommit
+lazywork
 
 # Test binary, built with `go test -c`
 *.test

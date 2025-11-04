@@ -6,13 +6,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/miltonparedes/lazycommit/pkg/config"
-	"github.com/miltonparedes/lazycommit/pkg/provider"
-	"github.com/miltonparedes/lazycommit/pkg/types"
+	"github.com/miltonparedes/lazywork/pkg/config"
+	"github.com/miltonparedes/lazywork/pkg/provider"
+	"github.com/miltonparedes/lazywork/pkg/types"
 )
 
 func main() {
-	fmt.Println("lazycommit - AI-powered commit message generator")
+	fmt.Println("lazywork - AI-powered git workflow automation")
 	fmt.Println("Initializing...")
 
 	cfg, err := config.Load()
@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	providerName := os.Getenv("LAZYCOMMIT_PROVIDER")
+	providerName := os.Getenv("LAZYWORK_PROVIDER")
 	if providerName == "" {
 		providerName = cfg.DefaultProvider
 	}

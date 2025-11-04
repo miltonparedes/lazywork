@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/miltonparedes/lazycommit/pkg/config"
-	"github.com/miltonparedes/lazycommit/pkg/types"
+	"github.com/miltonparedes/lazywork/pkg/config"
+	"github.com/miltonparedes/lazywork/pkg/types"
 )
 
 type AnthropicProvider struct {
