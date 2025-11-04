@@ -34,7 +34,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	configPath := filepath.Join(homeDir, ".config", "lazycommit", "config.json")
+	configPath := filepath.Join(homeDir, ".config", "lazywork", "config.json")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return getDefaultConfig(), nil
@@ -67,27 +67,27 @@ func resolveEnvironmentVariables(cfg *Config) {
 
 func getDefaultConfig() *Config {
 	return &Config{
-		DefaultProvider: "openai",
+		DefaultProvider: "anthropic",
 		Providers: map[string]Provider{
 			"openai": {
 				Type:      "openai",
 				BaseURL:   "https://api.openai.com/v1",
 				APIKey:    "$OPENAI_API_KEY",
-				MaxTokens: 1000,
+				MaxTokens: 2000,
 				Models: []Model{
 					{
 						ID:            "gpt-4o",
 						Name:          "GPT-4o",
 						ContextWindow: 128000,
 						MaxTokens:     4096,
-						Temperature:   0.7,
+						Temperature:   0.3,
 					},
 					{
 						ID:            "gpt-4o-mini",
 						Name:          "GPT-4o Mini",
 						ContextWindow: 128000,
 						MaxTokens:     16384,
-						Temperature:   0.7,
+						Temperature:   0.3,
 					},
 				},
 			},
@@ -95,21 +95,21 @@ func getDefaultConfig() *Config {
 				Type:      "anthropic",
 				BaseURL:   "https://api.anthropic.com/v1",
 				APIKey:    "$ANTHROPIC_API_KEY",
-				MaxTokens: 1000,
+				MaxTokens: 2000,
 				Models: []Model{
 					{
 						ID:            "claude-3-5-sonnet-20241022",
 						Name:          "Claude 3.5 Sonnet",
 						ContextWindow: 200000,
 						MaxTokens:     8192,
-						Temperature:   0.7,
+						Temperature:   0.3,
 					},
 					{
 						ID:            "claude-3-5-haiku-20241022",
 						Name:          "Claude 3.5 Haiku",
 						ContextWindow: 200000,
 						MaxTokens:     8192,
-						Temperature:   0.7,
+						Temperature:   0.3,
 					},
 				},
 			},
@@ -123,7 +123,7 @@ func (c *Config) Save() error {
 		return fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "lazycommit")
+	configDir := filepath.Join(homeDir, ".config", "lazywork")
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}

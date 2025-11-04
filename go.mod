@@ -1,3 +1,3 @@
-module github.com/miltonparedes/lazycommit
+module github.com/miltonparedes/lazywork
 
 go 1.23

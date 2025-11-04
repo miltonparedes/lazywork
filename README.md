@@ -1,13 +1,27 @@
-# lazycommit
+# lazywork
 
-AI-powered commit message generator with support for multiple AI providers.
+AI-powered Git workflow automation tool that handles the entire development workflow intelligently.
+
+## Vision
+
+LazyWork goes beyond simple commit message generation. It's an intelligent Git workflow assistant that:
+
+- **Auto-generates commit messages** with AI understanding of your changes
+- **Manages branches intelligently** with AI-generated semantic names
+- **Separates features automatically** by analyzing code changes and grouping related modifications
+- **Creates atomic commits** by understanding feature boundaries and dependencies
+- **Integrates with CLI agents** like Claude Code for seamless workflow automation
+- **Manages Git worktrees** automatically for parallel development streams
 
 ## Features
 
-- Multiple AI provider support (OpenAI, Anthropic)
-- Streaming and completion modes
-- Configurable models and parameters
-- Environment-based API key management
+- **Smart Commit Generation**: AI analyzes diffs to create meaningful, conventional commit messages
+- **Intelligent Branch Management**: Auto-generates branch names based on feature analysis
+- **Feature Separation**: AI identifies distinct features in your changes and creates separate commits
+- **Hook Integration**: Works with git hooks and CLI agents for automated workflows
+- **Multiple AI Providers**: OpenAI (GPT-4o) and Anthropic (Claude 3.5) support
+- **Streaming & Completion**: Real-time or batch processing modes
+- **Flexible Configuration**: Per-provider and per-model settings
 
 ## AI Providers
 
@@ -18,7 +32,13 @@ AI-powered commit message generator with support for multiple AI providers.
 
 ### Configuration
 
-Configuration is stored in `~/.config/lazycommit/config.json`. If no config exists, defaults will be used.
+Configuration is stored in `~/.config/lazywork/config.json`. If no config exists, defaults will be used.
+
+The AI providers are configured with models optimized for code analysis and natural language generation, essential for:
+- Analyzing complex diffs and separating features
+- Generating semantic branch names
+- Creating contextual commit messages
+- Understanding code structure and dependencies
 
 Example configuration:
 
@@ -72,19 +92,39 @@ export ANTHROPIC_API_KEY="your-anthropic-key"
 Switch providers:
 
 ```bash
-export LAZYCOMMIT_PROVIDER="anthropic"
+export LAZYWORK_PROVIDER="anthropic"
 ```
+
+### Provider Recommendations
+
+**For Complex Analysis** (feature separation, branch naming):
+- Claude 3.5 Sonnet: Excellent code understanding and reasoning
+- GPT-4o: Strong at pattern recognition and semantic analysis
+
+**For Fast Operations** (simple commits):
+- Claude 3.5 Haiku: Fast with good accuracy
+- GPT-4o Mini: Quick responses for straightforward tasks
 
 ## Building
 
 ```bash
-go build -o lazycommit .
+go build -o lazywork .
 ```
 
 ## Usage
 
 ```bash
-./lazycommit
+# Basic usage (coming soon)
+./lazywork commit
+
+# Auto-generate branch for current changes
+./lazywork branch
+
+# Separate features and create atomic commits
+./lazywork separate
+
+# Full auto-workflow
+./lazywork auto
 ```
 
 ## Architecture

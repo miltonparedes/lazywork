@@ -3,8 +3,8 @@ package provider
 import (
 	"fmt"
 
-	"github.com/miltonparedes/lazycommit/pkg/config"
-	"github.com/miltonparedes/lazycommit/pkg/types"
+	"github.com/miltonparedes/lazywork/pkg/config"
+	"github.com/miltonparedes/lazywork/pkg/types"
 )
 
 func New(name string, cfg config.Provider) (types.Provider, error) {
