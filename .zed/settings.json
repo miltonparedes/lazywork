@@ -1,13 +1,10 @@
 {
   "languages": {
     "Go": {
-      "language_servers": ["gopls"],
-      "format_on_save": {
-        "external": {
-          "command": "gofumpt",
-          "arguments": []
-        }
-      },
+      "language_servers": [
+        "gopls"
+      ],
+      "format_on_save": "on",
       "tab_size": 4,
       "hard_tabs": true
     }
