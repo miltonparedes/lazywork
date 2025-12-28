@@ -13,9 +13,10 @@ var (
 	BuildDate = "unknown"
 
 	// Global flags
-	jsonOutput bool
-	noColor    bool
-	cfgFile    string
+	jsonOutput  bool
+	noColor     bool
+	cfgFile     string
+	shellHelper bool
 )
 
 var rootCmd = &cobra.Command{
@@ -37,6 +38,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (agent-friendly)")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable color output")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file path (default ~/.config/lazywork/config.json)")
+	rootCmd.PersistentFlags().BoolVar(&shellHelper, "shell-helper", false, "Output for shell function evaluation (used by lw function)")
+	rootCmd.PersistentFlags().MarkHidden("shell-helper")
 }
 
 func IsJSONOutput() bool {
@@ -49,6 +52,10 @@ func IsNoColor() bool {
 
 func ConfigFile() string {
 	return cfgFile
+}
+
+func IsShellHelper() bool {
+	return shellHelper
 }
 
 func Stdout() *os.File {

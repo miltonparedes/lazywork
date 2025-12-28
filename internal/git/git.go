@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -64,10 +65,7 @@ func ListWorktrees() ([]Worktree, error) {
 		} else if strings.HasPrefix(line, "branch ") && current != nil {
 			branch := strings.TrimPrefix(line, "branch ")
 			// Extract branch name from refs/heads/...
-			if strings.HasPrefix(branch, "refs/heads/") {
-				branch = strings.TrimPrefix(branch, "refs/heads/")
-			}
-			current.Branch = branch
+			current.Branch = strings.TrimPrefix(branch, "refs/heads/")
 		} else if line == "bare" && current != nil {
 			current.Bare = true
 		}
@@ -131,6 +129,190 @@ func GetWorktreePath(baseDir, name string) (string, error) {
 	}
 
 	return filepath.Join(root, baseDir, name), nil
+}
+
+func HasUncommittedChanges() bool {
+	output, err := runGit("status", "--porcelain")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(output) != ""
+}
+
+func Checkout(branch string) error {
+	_, err := runGit("checkout", branch)
+	return err
+}
+
+// Stash saves uncommitted changes and returns the stash reference
+func Stash(message string) (string, error) {
+	args := []string{"stash", "push"}
+	if message != "" {
+		args = append(args, "-m", message)
+	}
+	_, err := runGit(args...)
+	if err != nil {
+		return "", err
+	}
+	// Get the stash reference
+	output, err := runGit("stash", "list", "-1")
+	if err != nil {
+		return "", err
+	}
+	// Extract stash@{0} or similar
+	parts := strings.SplitN(strings.TrimSpace(output), ":", 2)
+	if len(parts) > 0 {
+		return parts[0], nil
+	}
+	return "stash@{0}", nil
+}
+
+func StashPop() error {
+	_, err := runGit("stash", "pop")
+	return err
+}
+
+func Merge(branch string) error {
+	_, err := runGit("merge", branch)
+	return err
+}
+
+func DeleteBranch(name string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	_, err := runGit("branch", flag, name)
+	return err
+}
+
+// GetMainBranch returns "main" or "master" depending on what exists
+func GetMainBranch() string {
+	if BranchExists("main") {
+		return "main"
+	}
+	return "master"
+}
+
+func GetGitDir() (string, error) {
+	output, err := runGit("rev-parse", "--git-dir")
+	if err != nil {
+		return "", err
+	}
+	path := strings.TrimSpace(output)
+	// Make absolute if relative
+	if !filepath.IsAbs(path) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(cwd, path)
+	}
+	return path, nil
+}
+
+// IsMainWorktree returns true if we're in the main worktree (not a secondary worktree)
+func IsMainWorktree() bool {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return false
+	}
+	// In secondary worktrees, git-dir contains /worktrees/ path
+	// e.g., /path/to/repo/.git/worktrees/feature-name
+	return !strings.Contains(gitDir, string(filepath.Separator)+"worktrees"+string(filepath.Separator))
+}
+
+const (
+	statePreviousBranch = "LAZYWORK_PREVIOUS_BRANCH"
+	stateStashRef       = "LAZYWORK_STASH_REF"
+)
+
+func SaveState(key, value string) error {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(gitDir, key)
+	return os.WriteFile(path, []byte(value), 0o644)
+}
+
+func LoadState(key string) (string, error) {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(gitDir, key)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+func ClearState(key string) error {
+	gitDir, err := GetGitDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(gitDir, key)
+	err = os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+// HasSavedState returns true if there's saved state from a previous 'use' command
+func HasSavedState() bool {
+	_, err := LoadState(statePreviousBranch)
+	return err == nil
+}
+
+// SaveUseState saves the current branch and optional stash ref for later return
+func SaveUseState(previousBranch, stashRef string) error {
+	if err := SaveState(statePreviousBranch, previousBranch); err != nil {
+		return err
+	}
+	if stashRef != "" {
+		return SaveState(stateStashRef, stashRef)
+	}
+	return nil
+}
+
+func LoadUseState() (previousBranch, stashRef string, err error) {
+	previousBranch, err = LoadState(statePreviousBranch)
+	if err != nil {
+		return "", "", err
+	}
+	stashRef, _ = LoadState(stateStashRef)
+	return previousBranch, stashRef, nil
+}
+
+// ClearUseState removes all saved state from a 'use' command
+func ClearUseState() error {
+	if err := ClearState(statePreviousBranch); err != nil {
+		return err
+	}
+	return ClearState(stateStashRef)
+}
+
+// FindWorktreeByName finds a worktree by name (basename match)
+func FindWorktreeByName(name string) (*Worktree, error) {
+	worktrees, err := ListWorktrees()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, wt := range worktrees {
+		if wt.Bare {
+			continue
+		}
+		// Match by basename or branch name
+		if filepath.Base(wt.Path) == name || wt.Branch == name {
+			return &wt, nil
+		}
+	}
+	return nil, fmt.Errorf("worktree '%s' not found", name)
 }
 
 func runGit(args ...string) (string, error) {

@@ -56,9 +56,74 @@ var worktreePruneCmd = &cobra.Command{
 	RunE:  runWorktreePrune,
 }
 
+var worktreeGoCmd = &cobra.Command{
+	Use:   "go [name]",
+	Short: "Navigate to a worktree directory",
+	Long: `Navigate to a worktree directory.
+
+If no name is provided, you'll be prompted to select one interactively.
+
+To use this command effectively, add this shell function to your ~/.bashrc or ~/.zshrc:
+
+  lw() {
+    local output
+    output=$(lazywork "$@" --shell-helper 2>&1)
+    if [[ $output == cd\ * ]]; then
+      eval "$output"
+    else
+      echo "$output"
+    fi
+  }
+
+Then use: lw worktree go [name]`,
+	Aliases: []string{"cd"},
+	Args:    cobra.MaximumNArgs(1),
+	RunE:    runWorktreeGo,
+}
+
+var worktreeUseCmd = &cobra.Command{
+	Use:   "use [name]",
+	Short: "Checkout worktree branch in main repo",
+	Long: `Checkout a worktree's branch in the main repository.
+
+This is useful when your project configuration (Docker, databases, etc.)
+only works in the main repository directory.
+
+The command will:
+1. Stash any uncommitted changes (with your permission)
+2. Checkout the worktree's branch
+3. Save state so you can return later with 'worktree return'`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runWorktreeUse,
+}
+
+var worktreeReturnCmd = &cobra.Command{
+	Use:   "return",
+	Short: "Return to previous branch after 'use'",
+	Long: `Return to the branch you were on before using 'worktree use'.
+
+This will:
+1. Checkout the previous branch
+2. Restore any stashed changes`,
+	RunE: runWorktreeReturn,
+}
+
+var worktreeFinishCmd = &cobra.Command{
+	Use:   "finish [name]",
+	Short: "Merge worktree branch and cleanup",
+	Long: `Merge a worktree's branch into the current branch and optionally clean up.
+
+This command must be run from the main branch (main/master).
+After a successful merge, you'll be asked if you want to delete
+the worktree and its branch.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runWorktreeFinish,
+}
+
 var (
 	forceRemove bool
 	fromBranch  string
+	showSetup   bool
 )
 
 func init() {
@@ -67,9 +132,14 @@ func init() {
 	worktreeCmd.AddCommand(worktreeAddCmd)
 	worktreeCmd.AddCommand(worktreeRemoveCmd)
 	worktreeCmd.AddCommand(worktreePruneCmd)
+	worktreeCmd.AddCommand(worktreeGoCmd)
+	worktreeCmd.AddCommand(worktreeUseCmd)
+	worktreeCmd.AddCommand(worktreeReturnCmd)
+	worktreeCmd.AddCommand(worktreeFinishCmd)
 
 	worktreeRemoveCmd.Flags().BoolVarP(&forceRemove, "force", "f", false, "Force removal even with uncommitted changes")
 	worktreeAddCmd.Flags().StringVarP(&fromBranch, "branch", "b", "", "Create worktree from existing branch instead of new branch")
+	worktreeGoCmd.Flags().BoolVar(&showSetup, "setup", false, "Show shell function setup instructions")
 }
 
 func runWorktreeList(cmd *cobra.Command, args []string) error {
@@ -278,6 +348,427 @@ func runWorktreePrune(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Success("Pruned stale worktree entries")
+
+	return nil
+}
+
+const shellHelperSetup = `# Add this to your ~/.bashrc or ~/.zshrc:
+
+lw() {
+  local output
+  output=$(lazywork "$@" --shell-helper 2>&1)
+  if [[ $output == cd\ * ]]; then
+    eval "$output"
+  else
+    echo "$output"
+  fi
+}
+
+# Then reload your shell:
+# source ~/.bashrc  # or ~/.zshrc
+`
+
+func runWorktreeGo(cmd *cobra.Command, args []string) error {
+	out := output.New(jsonOutput, noColor)
+
+	if showSetup {
+		fmt.Print(shellHelperSetup)
+		return nil
+	}
+
+	if !git.IsInsideWorkTree() {
+		err := fmt.Errorf("not inside a git repository")
+		out.ErrorResult(err, "NOT_GIT_REPO")
+		return err
+	}
+
+	worktrees, err := git.ListWorktrees()
+	if err != nil {
+		out.ErrorResult(err, "WORKTREE_LIST_ERROR")
+		return err
+	}
+
+	var secondaryWorktrees []git.Worktree
+	for _, wt := range worktrees {
+		if !wt.Bare && strings.Contains(wt.Path, string(filepath.Separator)+".worktrees"+string(filepath.Separator)) {
+			secondaryWorktrees = append(secondaryWorktrees, wt)
+		}
+	}
+
+	if len(secondaryWorktrees) == 0 {
+		err := fmt.Errorf("no worktrees found. Create one with: lazywork worktree add <name>")
+		out.ErrorResult(err, "NO_WORKTREES")
+		return err
+	}
+
+	var name string
+	if len(args) > 0 {
+		name = args[0]
+	} else if out.IsTTY() {
+		form := tui.WorktreeSelectForm(secondaryWorktrees, &name)
+		if err := form.Run(); err != nil {
+			return err
+		}
+	} else {
+		err := fmt.Errorf("worktree name required (use: lazywork worktree go <name>)")
+		out.ErrorResult(err, "NAME_REQUIRED")
+		return err
+	}
+
+	var targetPath string
+	for _, wt := range secondaryWorktrees {
+		if filepath.Base(wt.Path) == name || wt.Branch == name {
+			targetPath = wt.Path
+			break
+		}
+	}
+
+	if targetPath == "" {
+		err := fmt.Errorf("worktree '%s' not found", name)
+		out.ErrorResult(err, "WORKTREE_NOT_FOUND")
+		return err
+	}
+
+	if jsonOutput {
+		return out.JSON(map[string]interface{}{
+			"path": targetPath,
+			"cd":   fmt.Sprintf("cd %s", targetPath),
+		})
+	}
+
+	if shellHelper {
+		fmt.Printf("cd %s\n", targetPath)
+		return nil
+	}
+
+	out.Info(fmt.Sprintf("Run: cd %s", targetPath))
+	out.Dim("Tip: Use 'lw worktree go' with shell helper for automatic cd")
+	out.Dim("Run 'lazywork worktree go --setup' for setup instructions")
+
+	return nil
+}
+
+func runWorktreeUse(cmd *cobra.Command, args []string) error {
+	out := output.New(jsonOutput, noColor)
+
+	if !git.IsInsideWorkTree() {
+		err := fmt.Errorf("not inside a git repository")
+		out.ErrorResult(err, "NOT_GIT_REPO")
+		return err
+	}
+
+	if !git.IsMainWorktree() {
+		err := fmt.Errorf("must be in main repository, not a worktree")
+		out.ErrorResult(err, "NOT_MAIN_WORKTREE")
+		return err
+	}
+
+	if git.HasSavedState() {
+		err := fmt.Errorf("already using a worktree branch. Run 'lazywork worktree return' first")
+		out.ErrorResult(err, "STATE_EXISTS")
+		return err
+	}
+
+	worktrees, err := git.ListWorktrees()
+	if err != nil {
+		out.ErrorResult(err, "WORKTREE_LIST_ERROR")
+		return err
+	}
+
+	var secondaryWorktrees []git.Worktree
+	for _, wt := range worktrees {
+		if !wt.Bare && strings.Contains(wt.Path, string(filepath.Separator)+".worktrees"+string(filepath.Separator)) {
+			secondaryWorktrees = append(secondaryWorktrees, wt)
+		}
+	}
+
+	if len(secondaryWorktrees) == 0 {
+		err := fmt.Errorf("no worktrees found")
+		out.ErrorResult(err, "NO_WORKTREES")
+		return err
+	}
+
+	var name string
+	if len(args) > 0 {
+		name = args[0]
+	} else if out.IsTTY() {
+		form := tui.WorktreeSelectForm(secondaryWorktrees, &name)
+		if err := form.Run(); err != nil {
+			return err
+		}
+	} else {
+		err := fmt.Errorf("worktree name required")
+		out.ErrorResult(err, "NAME_REQUIRED")
+		return err
+	}
+
+	var targetWorktree *git.Worktree
+	for _, wt := range secondaryWorktrees {
+		if filepath.Base(wt.Path) == name || wt.Branch == name {
+			targetWorktree = &wt
+			break
+		}
+	}
+
+	if targetWorktree == nil {
+		err := fmt.Errorf("worktree '%s' not found", name)
+		out.ErrorResult(err, "WORKTREE_NOT_FOUND")
+		return err
+	}
+
+	if targetWorktree.Branch == "" {
+		err := fmt.Errorf("worktree is in detached HEAD state")
+		out.ErrorResult(err, "DETACHED_HEAD")
+		return err
+	}
+
+	currentBranch, err := git.CurrentBranch()
+	if err != nil {
+		out.ErrorResult(err, "BRANCH_ERROR")
+		return err
+	}
+
+	var stashRef string
+	if git.HasUncommittedChanges() {
+		if out.IsTTY() {
+			var doStash bool
+			form := tui.StashConfirmForm(&doStash)
+			if err := form.Run(); err != nil {
+				return err
+			}
+			if !doStash {
+				err := fmt.Errorf("cancelled: uncommitted changes would be lost")
+				out.ErrorResult(err, "CANCELLED")
+				return err
+			}
+		} else if !jsonOutput {
+			err := fmt.Errorf("uncommitted changes detected. Commit or stash them first")
+			out.ErrorResult(err, "UNCOMMITTED_CHANGES")
+			return err
+		}
+
+		stashRef, err = git.Stash("lazywork: auto-stash before worktree use")
+		if err != nil {
+			out.ErrorResult(err, "STASH_ERROR")
+			return err
+		}
+	}
+
+	if err := git.SaveUseState(currentBranch, stashRef); err != nil {
+		out.ErrorResult(err, "STATE_SAVE_ERROR")
+		return err
+	}
+
+	if err := git.Checkout(targetWorktree.Branch); err != nil {
+		git.ClearUseState()
+		if stashRef != "" {
+			git.StashPop()
+		}
+		out.ErrorResult(err, "CHECKOUT_ERROR")
+		return err
+	}
+
+	if jsonOutput {
+		return out.JSON(map[string]interface{}{
+			"branch":          targetWorktree.Branch,
+			"previous_branch": currentBranch,
+			"stashed":         stashRef != "",
+		})
+	}
+
+	out.Success(fmt.Sprintf("Switched to branch: %s", targetWorktree.Branch))
+	if stashRef != "" {
+		out.Dim("  Changes stashed automatically")
+	}
+	out.Println()
+	out.Info("Run 'lazywork worktree return' to go back")
+
+	return nil
+}
+
+func runWorktreeReturn(cmd *cobra.Command, args []string) error {
+	out := output.New(jsonOutput, noColor)
+
+	if !git.IsInsideWorkTree() {
+		err := fmt.Errorf("not inside a git repository")
+		out.ErrorResult(err, "NOT_GIT_REPO")
+		return err
+	}
+
+	if !git.IsMainWorktree() {
+		err := fmt.Errorf("must be in main repository, not a worktree")
+		out.ErrorResult(err, "NOT_MAIN_WORKTREE")
+		return err
+	}
+
+	previousBranch, stashRef, err := git.LoadUseState()
+	if err != nil {
+		err := fmt.Errorf("no previous state found. Did you run 'worktree use' first?")
+		out.ErrorResult(err, "NO_STATE")
+		return err
+	}
+
+	if git.HasUncommittedChanges() {
+		err := fmt.Errorf("you have uncommitted changes. Commit or stash them before returning")
+		out.ErrorResult(err, "UNCOMMITTED_CHANGES")
+		return err
+	}
+
+	if err := git.Checkout(previousBranch); err != nil {
+		out.ErrorResult(err, "CHECKOUT_ERROR")
+		return err
+	}
+
+	if stashRef != "" {
+		if err := git.StashPop(); err != nil {
+			out.Warning(fmt.Sprintf("Could not restore stash: %v", err))
+		}
+	}
+
+	if err := git.ClearUseState(); err != nil {
+		out.Warning(fmt.Sprintf("Could not clear state: %v", err))
+	}
+
+	if jsonOutput {
+		return out.JSON(map[string]interface{}{
+			"branch":   previousBranch,
+			"restored": stashRef != "",
+		})
+	}
+
+	out.Success(fmt.Sprintf("Returned to branch: %s", previousBranch))
+	if stashRef != "" {
+		out.Dim("  Stashed changes restored")
+	}
+
+	return nil
+}
+
+func runWorktreeFinish(cmd *cobra.Command, args []string) error {
+	out := output.New(jsonOutput, noColor)
+
+	if !git.IsInsideWorkTree() {
+		err := fmt.Errorf("not inside a git repository")
+		out.ErrorResult(err, "NOT_GIT_REPO")
+		return err
+	}
+
+	if !git.IsMainWorktree() {
+		err := fmt.Errorf("must be in main repository, not a worktree")
+		out.ErrorResult(err, "NOT_MAIN_WORKTREE")
+		return err
+	}
+
+	currentBranch, err := git.CurrentBranch()
+	if err != nil {
+		out.ErrorResult(err, "BRANCH_ERROR")
+		return err
+	}
+
+	mainBranch := git.GetMainBranch()
+	if currentBranch != mainBranch {
+		err := fmt.Errorf("must be on %s branch to finish a worktree", mainBranch)
+		out.ErrorResult(err, "NOT_MAIN_BRANCH")
+		return err
+	}
+
+	if git.HasUncommittedChanges() {
+		err := fmt.Errorf("uncommitted changes detected. Commit or stash them first")
+		out.ErrorResult(err, "UNCOMMITTED_CHANGES")
+		return err
+	}
+
+	worktrees, err := git.ListWorktrees()
+	if err != nil {
+		out.ErrorResult(err, "WORKTREE_LIST_ERROR")
+		return err
+	}
+
+	var secondaryWorktrees []git.Worktree
+	for _, wt := range worktrees {
+		if !wt.Bare && strings.Contains(wt.Path, string(filepath.Separator)+".worktrees"+string(filepath.Separator)) {
+			secondaryWorktrees = append(secondaryWorktrees, wt)
+		}
+	}
+
+	if len(secondaryWorktrees) == 0 {
+		err := fmt.Errorf("no worktrees found")
+		out.ErrorResult(err, "NO_WORKTREES")
+		return err
+	}
+
+	var name string
+	if len(args) > 0 {
+		name = args[0]
+	} else if out.IsTTY() {
+		form := tui.WorktreeSelectForm(secondaryWorktrees, &name)
+		if err := form.Run(); err != nil {
+			return err
+		}
+	} else {
+		err := fmt.Errorf("worktree name required")
+		out.ErrorResult(err, "NAME_REQUIRED")
+		return err
+	}
+
+	var targetWorktree *git.Worktree
+	for _, wt := range secondaryWorktrees {
+		if filepath.Base(wt.Path) == name || wt.Branch == name {
+			targetWorktree = &wt
+			break
+		}
+	}
+
+	if targetWorktree == nil {
+		err := fmt.Errorf("worktree '%s' not found", name)
+		out.ErrorResult(err, "WORKTREE_NOT_FOUND")
+		return err
+	}
+
+	if targetWorktree.Branch == "" {
+		err := fmt.Errorf("worktree is in detached HEAD state, cannot merge")
+		out.ErrorResult(err, "DETACHED_HEAD")
+		return err
+	}
+
+	if err := git.Merge(targetWorktree.Branch); err != nil {
+		out.Error(fmt.Sprintf("Merge failed: %v", err))
+		out.Println()
+		out.Info("Resolve conflicts and run 'git commit', then try again")
+		return err
+	}
+
+	out.Success(fmt.Sprintf("Merged %s into %s", targetWorktree.Branch, mainBranch))
+
+	var doCleanup bool
+	if out.IsTTY() {
+		form := tui.CleanupConfirmForm(filepath.Base(targetWorktree.Path), &doCleanup)
+		if err := form.Run(); err != nil {
+			return err
+		}
+	}
+
+	if jsonOutput {
+		return out.JSON(map[string]interface{}{
+			"merged":  true,
+			"branch":  targetWorktree.Branch,
+			"cleanup": doCleanup,
+		})
+	}
+
+	if doCleanup {
+		if err := git.RemoveWorktree(targetWorktree.Path, false); err != nil {
+			out.Warning(fmt.Sprintf("Could not remove worktree: %v", err))
+		} else {
+			out.Success(fmt.Sprintf("Removed worktree: %s", filepath.Base(targetWorktree.Path)))
+		}
+
+		if err := git.DeleteBranch(targetWorktree.Branch, false); err != nil {
+			out.Warning(fmt.Sprintf("Could not delete branch: %v", err))
+		} else {
+			out.Success(fmt.Sprintf("Deleted branch: %s", targetWorktree.Branch))
+		}
+	}
 
 	return nil
 }
