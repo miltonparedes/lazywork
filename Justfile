@@ -39,14 +39,23 @@ test-coverage:
     go test -coverprofile=coverage.out ./...
     go tool cover -html=coverage.out -o coverage.html
 
+# Go bin path
+gobin := `go env GOPATH` + "/bin"
+
 # Format code with gofumpt
 fmt:
-    gofumpt -w .
+    @test -x {{gobin}}/gofumpt || { echo "Installing gofumpt..."; go install mvdan.cc/gofumpt@latest; }
+    {{gobin}}/gofumpt -w .
+
+# Check format without modifying files
+fmt-check:
+    @test -x {{gobin}}/gofumpt || { echo "Installing gofumpt..."; go install mvdan.cc/gofumpt@latest; }
+    @{{gobin}}/gofumpt -l . | grep . && { echo "Files need formatting:"; {{gobin}}/gofumpt -l .; exit 1; } || echo "All files formatted correctly"
 
 # Lint code
-lint:
-    gofumpt -l -w .
-    staticcheck ./...
+lint: fmt
+    @test -x {{gobin}}/staticcheck || { echo "Installing staticcheck..."; go install honnef.co/go/tools/cmd/staticcheck@latest; }
+    {{gobin}}/staticcheck ./...
 
 # Clean build artifacts
 clean:
