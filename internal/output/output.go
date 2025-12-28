@@ -30,7 +30,7 @@ type Styles struct {
 }
 
 func New(jsonFlag, noColorFlag bool) *Output {
-	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
 
 	o := &Output{
 		json:    jsonFlag,
