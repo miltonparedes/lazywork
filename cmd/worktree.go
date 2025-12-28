@@ -63,19 +63,14 @@ var worktreeGoCmd = &cobra.Command{
 
 If no name is provided, you'll be prompted to select one interactively.
 
-To use this command effectively, add this shell function to your ~/.bashrc or ~/.zshrc:
+Setup shell integration for automatic cd:
+  # Bash/Zsh
+  eval "$(lazywork shell init)"
 
-  lw() {
-    local output
-    output=$(lazywork "$@" --shell-helper 2>&1)
-    if [[ $output == cd\ * ]]; then
-      eval "$output"
-    else
-      echo "$output"
-    fi
-  }
+  # Fish
+  lazywork shell init fish | source
 
-Then use: lw worktree go [name]`,
+Then use: lwt go [name]`,
 	Aliases: []string{"cd"},
 	Args:    cobra.MaximumNArgs(1),
 	RunE:    runWorktreeGo,
@@ -123,7 +118,6 @@ the worktree and its branch.`,
 var (
 	forceRemove bool
 	fromBranch  string
-	showSetup   bool
 )
 
 func init() {
@@ -139,7 +133,6 @@ func init() {
 
 	worktreeRemoveCmd.Flags().BoolVarP(&forceRemove, "force", "f", false, "Force removal even with uncommitted changes")
 	worktreeAddCmd.Flags().StringVarP(&fromBranch, "branch", "b", "", "Create worktree from existing branch instead of new branch")
-	worktreeGoCmd.Flags().BoolVar(&showSetup, "setup", false, "Show shell function setup instructions")
 }
 
 func runWorktreeList(cmd *cobra.Command, args []string) error {
@@ -352,29 +345,8 @@ func runWorktreePrune(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-const shellHelperSetup = `# Add this to your ~/.bashrc or ~/.zshrc:
-
-lw() {
-  local output
-  output=$(lazywork "$@" --shell-helper 2>&1)
-  if [[ $output == cd\ * ]]; then
-    eval "$output"
-  else
-    echo "$output"
-  fi
-}
-
-# Then reload your shell:
-# source ~/.bashrc  # or ~/.zshrc
-`
-
 func runWorktreeGo(cmd *cobra.Command, args []string) error {
 	out := output.New(jsonOutput, noColor)
-
-	if showSetup {
-		fmt.Print(shellHelperSetup)
-		return nil
-	}
 
 	if !git.IsInsideWorkTree() {
 		err := fmt.Errorf("not inside a git repository")
@@ -442,8 +414,8 @@ func runWorktreeGo(cmd *cobra.Command, args []string) error {
 	}
 
 	out.Info(fmt.Sprintf("Run: cd %s", targetPath))
-	out.Dim("Tip: Use 'lw worktree go' with shell helper for automatic cd")
-	out.Dim("Run 'lazywork worktree go --setup' for setup instructions")
+	out.Dim("Tip: Use 'lwt go' with shell integration for automatic cd")
+	out.Dim("Setup: eval \"$(lazywork shell init)\"")
 
 	return nil
 }
