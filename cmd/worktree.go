@@ -404,12 +404,12 @@ func runWorktreeGo(cmd *cobra.Command, args []string) error {
 	if jsonOutput {
 		return out.JSON(map[string]interface{}{
 			"path": targetPath,
-			"cd":   fmt.Sprintf("cd %s", targetPath),
+			"cd":   fmt.Sprintf("cd '%s'", targetPath),
 		})
 	}
 
 	if shellHelper {
-		fmt.Printf("cd %s\n", targetPath)
+		fmt.Printf("cd '%s'\n", targetPath)
 		return nil
 	}
 
