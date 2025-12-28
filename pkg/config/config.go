@@ -9,7 +9,16 @@ import (
 
 type Config struct {
 	DefaultProvider string              `json:"default_provider"`
+	WorktreeDir     string              `json:"worktree_dir,omitempty"`
 	Providers       map[string]Provider `json:"providers"`
+}
+
+// GetWorktreeDir returns the worktree directory, defaulting to ".worktrees"
+func (c *Config) GetWorktreeDir() string {
+	if c.WorktreeDir == "" {
+		return ".worktrees"
+	}
+	return c.WorktreeDir
 }
 
 type Provider struct {
@@ -28,13 +37,21 @@ type Model struct {
 	Temperature   float64 `json:"temperature,omitempty"`
 }
 
-func Load() (*Config, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %w", err)
-	}
+func DefaultConfigPath() string {
+	homeDir, _ := os.UserHomeDir()
+	return filepath.Join(homeDir, ".config", "lazywork", "config.json")
+}
 
-	configPath := filepath.Join(homeDir, ".config", "lazywork", "config.json")
+func Load() (*Config, error) {
+	return LoadFrom("")
+}
+
+// LoadFrom loads config from a custom path (empty string uses default)
+func LoadFrom(customPath string) (*Config, error) {
+	configPath := customPath
+	if configPath == "" {
+		configPath = DefaultConfigPath()
+	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return getDefaultConfig(), nil
@@ -132,17 +149,20 @@ func getDefaultConfig() *Config {
 }
 
 func (c *Config) Save() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get user home directory: %w", err)
+	return c.SaveTo("")
+}
+
+// SaveTo saves config to a custom path (empty string uses default)
+func (c *Config) SaveTo(customPath string) error {
+	configPath := customPath
+	if configPath == "" {
+		configPath = DefaultConfigPath()
 	}
 
-	configDir := filepath.Join(homeDir, ".config", "lazywork")
+	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
-
-	configPath := filepath.Join(configDir, "config.json")
 
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {

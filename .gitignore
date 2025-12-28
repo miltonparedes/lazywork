@@ -36,3 +36,6 @@ config.yaml
 dist/
 build/
 bin/
+
+# Agents
+CLAUDE.md
