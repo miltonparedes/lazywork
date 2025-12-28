@@ -33,24 +33,9 @@ archives:
 checksum:
   name_template: checksums.txt
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^ci:"
+release:
+  mode: keep-existing
 
-brews:
-  - name: lazywork
-    repository:
-      owner: miltonparedes
-      name: homebrew-tap
-    homepage: https://github.com/miltonparedes/lazywork
-    description: AI-powered Git workflow automation
-    license: MIT
-    install: |
-      bin.install "lazywork"
-    test: |
-      system "#{bin}/lazywork", "version"
+changelog:
+  # Disabled - using GitHub's "Generate release notes" instead
+  disable: true
