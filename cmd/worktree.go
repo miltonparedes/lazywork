@@ -1,13 +1,19 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/miltonparedes/lazywork/internal/git"
 	"github.com/miltonparedes/lazywork/internal/output"
+	"github.com/miltonparedes/lazywork/internal/state"
 	"github.com/miltonparedes/lazywork/internal/tui"
+	"github.com/miltonparedes/lazywork/internal/tui/selector"
 	"github.com/miltonparedes/lazywork/pkg/config"
 	"github.com/spf13/cobra"
 )
@@ -15,7 +21,10 @@ import (
 var worktreeCmd = &cobra.Command{
 	Use:   "worktree",
 	Short: "Manage git worktrees",
-	Long:  "List, create, and manage git worktrees with AI-powered naming.",
+	Long: `List, create, and manage git worktrees with AI-powered naming.
+
+When run without a subcommand, opens an interactive selector.`,
+	RunE: runWorktreeSelector,
 }
 
 var worktreeListCmd = &cobra.Command{
@@ -116,8 +125,9 @@ the worktree and its branch.`,
 }
 
 var (
-	forceRemove bool
-	fromBranch  string
+	forceRemove  bool
+	fromBranch   string
+	previousFlag bool
 )
 
 func init() {
@@ -133,6 +143,141 @@ func init() {
 
 	worktreeRemoveCmd.Flags().BoolVarP(&forceRemove, "force", "f", false, "Force removal even with uncommitted changes")
 	worktreeAddCmd.Flags().StringVarP(&fromBranch, "branch", "b", "", "Create worktree from existing branch instead of new branch")
+	worktreeGoCmd.Flags().BoolVarP(&previousFlag, "previous", "p", false, "Go to previous worktree (same as 'lwt go -')")
+
+	worktreeGoCmd.ValidArgsFunction = completeWorktreeNames
+	worktreeRemoveCmd.ValidArgsFunction = completeWorktreeNames
+	worktreeUseCmd.ValidArgsFunction = completeWorktreeNames
+	worktreeFinishCmd.ValidArgsFunction = completeWorktreeNames
+}
+
+func runWorktreeSelector(cmd *cobra.Command, args []string) error {
+	out := output.New(jsonOutput, noColor)
+
+	if !git.IsInsideWorkTree() {
+		err := fmt.Errorf("not inside a git repository")
+		out.ErrorResult(err, "NOT_GIT_REPO")
+		return err
+	}
+
+	if !out.IsTTY() {
+		return runWorktreeList(cmd, args)
+	}
+
+	worktrees, err := git.ListWorktrees()
+	if err != nil {
+		out.ErrorResult(err, "WORKTREE_LIST_ERROR")
+		return err
+	}
+
+	currentPath, _ := os.Getwd()
+	model := selector.New(worktrees, currentPath)
+
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
+		out.ErrorResult(err, "TUI_ERROR")
+		return err
+	}
+
+	action := finalModel.(selector.Model).Action()
+	if action == nil {
+		return nil
+	}
+
+	switch action.Type {
+	case "go":
+		return navigateToWorktree(out, action.Path)
+
+	case "delete":
+		var confirmed bool
+		form := tui.ConfirmForm(fmt.Sprintf("Delete worktree '%s'?", action.Name), &confirmed)
+		if err := form.Run(); err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil
+		}
+		if err := git.RemoveWorktree(action.Path, false); err != nil {
+			out.ErrorResult(err, "WORKTREE_REMOVE_ERROR")
+			return err
+		}
+		out.Success(fmt.Sprintf("Removed worktree: %s", action.Name))
+
+	case "add":
+		var name string
+		form := tui.BranchNameForm(&name)
+		if err := form.Run(); err != nil {
+			return err
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil
+		}
+
+		cfg, err := config.LoadFrom(cfgFile)
+		if err != nil {
+			out.ErrorResult(err, "CONFIG_LOAD_ERROR")
+			return err
+		}
+
+		worktreePath, err := git.GetWorktreePath(cfg.GetWorktreeDir(), name)
+		if err != nil {
+			out.ErrorResult(err, "PATH_ERROR")
+			return err
+		}
+
+		if git.BranchExists(name) {
+			err := fmt.Errorf("branch '%s' already exists", name)
+			out.ErrorResult(err, "BRANCH_EXISTS")
+			return err
+		}
+
+		if err := git.AddWorktree(worktreePath, name); err != nil {
+			out.ErrorResult(err, "WORKTREE_ADD_ERROR")
+			return err
+		}
+
+		out.Success(fmt.Sprintf("Created worktree: %s", name))
+		return navigateToWorktree(out, worktreePath)
+
+	case "use":
+		return runWorktreeUse(cmd, []string{action.Name})
+
+	case "finish":
+		return runWorktreeFinish(cmd, []string{action.Name})
+
+	case "quit":
+		return nil
+	}
+
+	return nil
+}
+
+func completeWorktreeNames(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	worktrees, err := git.ListWorktrees()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var completions []string
+	for _, wt := range worktrees {
+		if !wt.Bare && strings.Contains(wt.Path, string(filepath.Separator)+".worktrees"+string(filepath.Separator)) {
+			name := filepath.Base(wt.Path)
+			if strings.HasPrefix(name, toComplete) {
+				if wt.Branch != "" {
+					completions = append(completions, name+"\t"+wt.Branch)
+				} else {
+					completions = append(completions, name)
+				}
+			}
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
 func runWorktreeList(cmd *cobra.Command, args []string) error {
@@ -354,6 +499,10 @@ func runWorktreeGo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if previousFlag || (len(args) == 1 && args[0] == "-") {
+		return goToPreviousWorktree(out)
+	}
+
 	worktrees, err := git.ListWorktrees()
 	if err != nil {
 		out.ErrorResult(err, "WORKTREE_LIST_ERROR")
@@ -401,6 +550,84 @@ func runWorktreeGo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	return navigateToWorktree(out, targetPath)
+}
+
+func goToPreviousWorktree(out *output.Output) error {
+	// Use git common dir as key so history works across all worktrees
+	repoKey, err := git.GetGitCommonDir()
+	if err != nil {
+		out.ErrorResult(err, "GIT_COMMON_DIR_ERROR")
+		return err
+	}
+
+	history, err := state.LoadHistory()
+	if err != nil {
+		out.ErrorResult(err, "HISTORY_LOAD_ERROR")
+		return err
+	}
+
+	previous := history.GetPrevious(repoKey)
+	if previous == "" {
+		if out.IsTTY() {
+			worktrees, err := git.ListWorktrees()
+			if err != nil {
+				out.ErrorResult(err, "WORKTREE_LIST_ERROR")
+				return err
+			}
+
+			var secondaryWorktrees []git.Worktree
+			for _, wt := range worktrees {
+				if !wt.Bare && strings.Contains(wt.Path, string(filepath.Separator)+".worktrees"+string(filepath.Separator)) {
+					secondaryWorktrees = append(secondaryWorktrees, wt)
+				}
+			}
+
+			if len(secondaryWorktrees) == 0 {
+				err := fmt.Errorf("no worktrees found. Create one with: lazywork worktree add <name>")
+				out.ErrorResult(err, "NO_WORKTREES")
+				return err
+			}
+
+			var name string
+			form := tui.WorktreeSelectForm(secondaryWorktrees, &name)
+			if err := form.Run(); err != nil {
+				return err
+			}
+
+			for _, wt := range secondaryWorktrees {
+				if filepath.Base(wt.Path) == name || wt.Branch == name {
+					return navigateToWorktree(out, wt.Path)
+				}
+			}
+		}
+
+		err := fmt.Errorf("no previous worktree found")
+		out.ErrorResult(err, "NO_PREVIOUS")
+		return err
+	}
+
+	return navigateToWorktree(out, previous)
+}
+
+func navigateToWorktree(out *output.Output, targetPath string) error {
+	repoKey, _ := git.GetGitCommonDir()
+	if repoKey != "" {
+		history, err := state.LoadHistory()
+		if err == nil {
+			// If no current location is recorded, record the starting point first
+			// This ensures lwt go - can return to the origin after the first navigation
+			if history.GetCurrent(repoKey) == "" {
+				cwd, _ := os.Getwd()
+				if cwd != "" {
+					history.RecordVisit(repoKey, cwd)
+				}
+			}
+			history.RecordVisit(repoKey, targetPath)
+			_ = history.Save() // Best effort, don't fail navigation on history error
+		}
+	}
+
 	if jsonOutput {
 		return out.JSON(map[string]interface{}{
 			"path": targetPath,
@@ -409,7 +636,11 @@ func runWorktreeGo(cmd *cobra.Command, args []string) error {
 	}
 
 	if shellHelper {
-		fmt.Printf("cd '%s'\n", targetPath)
+		cdCmd := fmt.Sprintf("cd '%s'\n", targetPath)
+		if cdFile := os.Getenv("__LAZYWORK_CD_FILE"); cdFile != "" {
+			return os.WriteFile(cdFile, []byte(cdCmd), 0o600)
+		}
+		fmt.Print(cdCmd)
 		return nil
 	}
 
@@ -506,6 +737,10 @@ func runWorktreeUse(cmd *cobra.Command, args []string) error {
 			var doStash bool
 			form := tui.StashConfirmForm(&doStash)
 			if err := form.Run(); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					out.ErrorResult(fmt.Errorf("operation cancelled"), "CANCELLED")
+					return nil
+				}
 				return err
 			}
 			if !doStash {

@@ -26,8 +26,9 @@ build:
 install:
     go install -ldflags "{{ldflags}}" .
 
-# Install for development testing (binary + shell integration)
-dev-install: dev
+# Install local build (binary + shell integration)
+build-install: build
+    @echo "Installing version: {{version}}"
     LAZYWORK_LOCAL_BUILD=./lazywork ./scripts/install.sh
 
 # Run install script tests

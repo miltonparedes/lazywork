@@ -5,11 +5,34 @@ import (
 	"path/filepath"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/miltonparedes/lazywork/internal/git"
 )
 
+// ANSI base colors (0-7) adapt to user's terminal theme
+var (
+	ColorPrimary  = lipgloss.Color("4") // blue
+	ColorSelected = lipgloss.Color("2") // green
+	ColorNormal   = lipgloss.Color("7") // foreground
+	ColorDim      = lipgloss.Color("8") // bright black
+	ColorAccent   = lipgloss.Color("3") // yellow
+)
+
 func Theme() *huh.Theme {
-	return huh.ThemeBase()
+	t := huh.ThemeBase()
+
+	t.Focused.Title = t.Focused.Title.Foreground(ColorPrimary).Bold(true)
+	t.Blurred.Title = t.Blurred.Title.Foreground(ColorDim)
+
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(ColorSelected).Bold(true)
+	t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(ColorNormal)
+
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(ColorSelected).SetString("> ")
+
+	t.Help.ShortKey = t.Help.ShortKey.Foreground(ColorDim)
+	t.Help.ShortDesc = t.Help.ShortDesc.Foreground(ColorDim)
+
+	return t
 }
 
 func BranchNameForm(name *string) *huh.Form {
