@@ -5,7 +5,6 @@ REPO="miltonparedes/lazywork"
 INSTALL_DIR="${LAZYWORK_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="lazywork"
 
-# Flags
 VERSION=""
 PRERELEASE=false
 
