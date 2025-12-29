@@ -211,6 +211,25 @@ func GetGitDir() (string, error) {
 	return path, nil
 }
 
+// GetGitCommonDir returns the common git directory shared by all worktrees.
+// This is the same for all worktrees in a repository, making it suitable
+// for use as a repository-wide identifier.
+func GetGitCommonDir() (string, error) {
+	output, err := runGit("rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	path := strings.TrimSpace(output)
+	if !filepath.IsAbs(path) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		path = filepath.Join(cwd, path)
+	}
+	return path, nil
+}
+
 // IsMainWorktree returns true if we're in the main worktree (not a secondary worktree)
 func IsMainWorktree() bool {
 	gitDir, err := GetGitDir()
