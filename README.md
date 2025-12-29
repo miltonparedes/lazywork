@@ -7,11 +7,14 @@ Git workflow automation tool with worktree management, shell integration, and AI
 ## Installation
 
 ```bash
-# From releases
+# Latest stable release
 curl -fsSL https://raw.githubusercontent.com/miltonparedes/lazywork/main/scripts/install.sh | bash
 
+# Include pre-releases
+curl -fsSL .../install.sh | bash -s -- --prerelease
+
 # Specific version
-LAZYWORK_VERSION=v0.1.0-alpha curl -fsSL https://raw.githubusercontent.com/miltonparedes/lazywork/main/scripts/install.sh | bash
+curl -fsSL .../install.sh | bash -s -- --version v0.1.0-alpha
 
 # From source
 go install github.com/miltonparedes/lazywork@latest
