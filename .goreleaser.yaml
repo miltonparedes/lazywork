@@ -12,7 +12,6 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
     goarch:
       - amd64
       - arm64
@@ -26,31 +25,13 @@ archives:
   - format: tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    format_overrides:
-      - goos: windows
-        format: zip
 
 checksum:
   name_template: checksums.txt
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^ci:"
+release:
+  mode: keep-existing
 
-brews:
-  - name: lazywork
-    repository:
-      owner: miltonparedes
-      name: homebrew-tap
-    homepage: https://github.com/miltonparedes/lazywork
-    description: AI-powered Git workflow automation
-    license: MIT
-    install: |
-      bin.install "lazywork"
-    test: |
-      system "#{bin}/lazywork", "version"
+changelog:
+  # Disabled - using GitHub's "Generate release notes" instead
+  disable: true
