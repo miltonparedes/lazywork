@@ -121,8 +121,8 @@ func TestInitScriptFishDifferent(t *testing.T) {
 	if !strings.Contains(fishScript, "set -l") {
 		t.Error("Fish script missing 'set -l' (fish variable syntax)")
 	}
-	if !strings.Contains(fishScript, "string match") {
-		t.Error("Fish script missing 'string match' (fish string matching)")
+	if !strings.Contains(fishScript, "test -s") {
+		t.Error("Fish script missing 'test -s' (file size check)")
 	}
 }
 
@@ -172,12 +172,14 @@ func TestInitScriptHandlesCd(t *testing.T) {
 	for _, shell := range SupportedShells() {
 		script := InitScript(shell)
 
-		if !strings.Contains(script, "cd ") {
-			t.Errorf("InitScript(%q) doesn't handle cd command", shell)
+		// All scripts use a cd_file for navigation
+		if !strings.Contains(script, "cd_file") {
+			t.Errorf("InitScript(%q) doesn't use cd_file", shell)
 		}
 
-		if !strings.Contains(script, "eval") {
-			t.Errorf("InitScript(%q) doesn't use eval for cd", shell)
+		// All scripts source the cd file
+		if !strings.Contains(script, "source") {
+			t.Errorf("InitScript(%q) doesn't source cd file", shell)
 		}
 	}
 }

@@ -74,16 +74,20 @@ const bashScript = `# LazyWork shell integration
 
 # Wrapper function that handles cd commands from lazywork
 __lazywork_exec() {
-  local output
-  output=$(command lazywork "$@" --shell-helper 2>&1)
+  local cd_file
+  cd_file=$(mktemp)
+  trap "rm -f '$cd_file'" EXIT
+
+  __LAZYWORK_CD_FILE="$cd_file" command lazywork "$@" --shell-helper
   local exit_code=$?
 
-  if [[ $output == cd\ * ]]; then
-    eval "$output"
-  else
-    printf '%s\n' "$output"
-    return $exit_code
+  if [[ -s "$cd_file" ]]; then
+    source "$cd_file"
   fi
+
+  rm -f "$cd_file"
+  trap - EXIT
+  return $exit_code
 }
 
 # Aliases
@@ -96,16 +100,20 @@ const zshScript = `# LazyWork shell integration
 
 # Wrapper function that handles cd commands from lazywork
 __lazywork_exec() {
-  local output
-  output=$(command lazywork "$@" --shell-helper 2>&1)
+  local cd_file
+  cd_file=$(mktemp)
+  trap "rm -f '$cd_file'" EXIT
+
+  __LAZYWORK_CD_FILE="$cd_file" command lazywork "$@" --shell-helper
   local exit_code=$?
 
-  if [[ $output == cd\ * ]]; then
-    eval "$output"
-  else
-    printf '%s\n' "$output"
-    return $exit_code
+  if [[ -s "$cd_file" ]]; then
+    source "$cd_file"
   fi
+
+  rm -f "$cd_file"
+  trap - EXIT
+  return $exit_code
 }
 
 # Aliases
@@ -118,15 +126,17 @@ const fishScript = `# LazyWork shell integration
 
 # Wrapper function that handles cd commands from lazywork
 function __lazywork_exec
-    set -l output (command lazywork $argv --shell-helper 2>&1)
+    set -l cd_file (mktemp)
+
+    __LAZYWORK_CD_FILE=$cd_file command lazywork $argv --shell-helper
     set -l exit_code $status
 
-    if string match -q 'cd *' -- $output
-        eval $output
-    else
-        printf '%s\n' $output
-        return $exit_code
+    if test -s $cd_file
+        source $cd_file
     end
+
+    rm -f $cd_file
+    return $exit_code
 end
 
 # Aliases

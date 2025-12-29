@@ -173,7 +173,6 @@ func runWorktreeSelector(cmd *cobra.Command, args []string) error {
 	currentPath, _ := os.Getwd()
 	model := selector.New(worktrees, currentPath)
 
-	// Run without AltScreen to stay inline
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()
 	if err != nil {
@@ -637,7 +636,11 @@ func navigateToWorktree(out *output.Output, targetPath string) error {
 	}
 
 	if shellHelper {
-		fmt.Printf("cd '%s'\n", targetPath)
+		cdCmd := fmt.Sprintf("cd '%s'\n", targetPath)
+		if cdFile := os.Getenv("__LAZYWORK_CD_FILE"); cdFile != "" {
+			return os.WriteFile(cdFile, []byte(cdCmd), 0o600)
+		}
+		fmt.Print(cdCmd)
 		return nil
 	}
 

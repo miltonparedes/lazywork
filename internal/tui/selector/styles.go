@@ -1,30 +1,33 @@
 package selector
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/miltonparedes/lazywork/internal/tui"
+)
 
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("12"))
+			Foreground(tui.ColorPrimary)
 
 	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("10")).
+			Foreground(tui.ColorSelected).
 			Bold(true)
 
 	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("10"))
+			Foreground(tui.ColorSelected)
 
 	normalStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("7"))
+			Foreground(tui.ColorNormal)
 
 	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8"))
+			Foreground(tui.ColorDim)
 
 	currentMarker = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("11")).
+			Foreground(tui.ColorAccent).
 			SetString(" ← current")
 
 	helpStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")).
+			Foreground(tui.ColorDim).
 			Italic(true)
 )
